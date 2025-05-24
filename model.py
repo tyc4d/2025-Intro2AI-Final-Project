@@ -37,11 +37,9 @@ def Generator():
         downsample(512),
         downsample(512),
         downsample(512),
-        downsample(512),
     ]
 
     up_stack = [
-        upsample(512, apply_dropout=True),
         upsample(512, apply_dropout=True),
         upsample(512),
         upsample(256),
