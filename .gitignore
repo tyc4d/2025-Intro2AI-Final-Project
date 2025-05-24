@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# 虛擬環境
+venv/
+env/
+ENV/
+
+# 數據和模型文件（可選）
+data/
+trained_model/
+predictions/
+output/
+generator_model.keras
+
+# 圖片資料夾
+100image/
+200image/
+500image/
+1000image/
+
+# 系統文件
+.DS_Store
+Thumbs.db
