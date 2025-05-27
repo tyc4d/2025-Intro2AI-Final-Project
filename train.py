@@ -6,6 +6,8 @@ from skimage.color import rgb2lab, lab2rgb # skimage 用於色彩空間轉換
 from tqdm import tqdm
 from keras.callbacks import Callback
 import baseline # 從 baseline.py 匯入模型
+import multiprocessing # 新增
+from functools import partial # 可能用於簡化參數傳遞
 
 # TQDM Callback for Keras
 class TQDMProgressBar(Callback):
@@ -26,70 +28,116 @@ class TQDMProgressBar(Callback):
         print(f"Epoch {epoch + 1}/{self.epochs} - loss: {loss:.4f}")
 
 
+def _process_single_image_pair(bw_fname, bw_image_folder, color_image_folder, color_filenames_set, target_size):
+    """
+    工作函數：處理單個黑白圖片及其對應的彩色圖片。
+    由 multiprocessing.Pool 中的進程呼叫。
+    """
+    try:
+        base_name, _ = os.path.splitext(bw_fname)
+        if not base_name.endswith("_bw"):
+            # print(f"跳過無法識別的黑白檔名 (worker): {bw_fname}") # 在大量並行時，打印過多會影響性能和可讀性
+            return None
+        
+        original_base_name = base_name[:-3]
+        
+        potential_color_fnames = [f"{original_base_name}{ext}" for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif']]
+        color_fname_found = None
+        for potential_cfname in potential_color_fnames:
+            if potential_cfname in color_filenames_set: # 使用集合進行快速查找
+                color_fname_found = potential_cfname
+                break
+        
+        if not color_fname_found:
+            # print(f"找不到 {bw_fname} 對應的彩色圖片 (worker, 嘗試基底: {original_base_name})")
+            return None
+
+        bw_img_path = os.path.join(bw_image_folder, bw_fname)
+        bw_img = Image.open(bw_img_path).convert('L').resize(target_size, Image.Resampling.LANCZOS)
+        l_channel_np = np.array(bw_img, dtype=float) / 255.0
+        
+        color_img_path = os.path.join(color_image_folder, color_fname_found)
+        color_img = Image.open(color_img_path).convert('RGB').resize(target_size, Image.Resampling.LANCZOS)
+        color_img_lab = rgb2lab(np.array(color_img))
+        
+        ab_channels_np = color_img_lab[:, :, 1:] / 128.0
+        
+        # embed_input 每個圖像都重新生成隨機向量
+        embed_input_np = np.random.randn(1000)
+
+        return l_channel_np.reshape(target_size[0], target_size[1], 1), embed_input_np, ab_channels_np
+
+    except FileNotFoundError:
+        # print(f"找不到檔案 (worker)：{bw_fname} 或其對應的彩色圖片。")
+        return None
+    except Exception as e:
+        # print(f"處理檔案 {bw_fname} 時發生錯誤 (worker): {e}")
+        return None
+
 def load_and_preprocess_data(bw_image_folder, color_image_folder, target_size=(512, 512)):
     """
     載入黑白圖片 (L 通道) 和對應的彩色圖片 (ab 通道作為目標)。
     圖片會被 resize 到 target_size。
     embed_input 將使用隨機向量。
+    此版本使用 multiprocessing 並行處理圖片。
     """
-    X_l = []
-    X_embed = [] # 將使用隨機向量
-    Y_ab = []
-    bw_filenames = sorted(os.listdir(bw_image_folder))
-    color_filenames = sorted(os.listdir(color_image_folder))
-
-    # 確保黑白圖片和彩色圖片的檔名可以對應
-    # 這裡假設 file_converter.py 產生的黑白檔名是 原檔名_bw.xxx
-    # 而原始彩色圖片檔名是 原檔名.xxx
+    X_l_list = []
+    X_embed_list = []
+    Y_ab_list = []
     
+    bw_filenames = sorted(os.listdir(bw_image_folder))
+    color_filenames_set = set(sorted(os.listdir(color_image_folder))) # 使用集合以加速查找
+
+    if not bw_filenames:
+        raise ValueError("黑白圖片資料夾為空或不存在。")
+    if not color_filenames_set:
+        print("警告：彩色圖片資料夾為空或不存在。")
+
+    num_cpu = os.cpu_count()
+    print(f"使用 {num_cpu} 個 CPU 核心並行載入與預處理資料...")
+
+    # 準備 partial function，固定部分參數
+    # worker_fn = partial(_process_single_image_pair, 
+    #                     bw_image_folder=bw_image_folder, 
+    #                     color_image_folder=color_image_folder, 
+    #                     color_filenames_set=color_filenames_set, 
+    #                     target_size=target_size)
+    
+    # 或者直接準備參數列表
+    tasks = [(bw_fname, bw_image_folder, color_image_folder, color_filenames_set, target_size) for bw_fname in bw_filenames]
+
     processed_files = 0
-    for bw_fname in tqdm(bw_filenames, desc="載入並預處理圖像"):
-        try:
-            base_name, _ = os.path.splitext(bw_fname)
-            if not base_name.endswith("_bw"):
-                print(f"跳過無法識別的黑白檔名: {bw_fname}")
-                continue
-            
-            original_base_name = base_name[:-3]
-            
-            potential_color_fnames = [f"{original_base_name}{ext}" for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif']]
-            color_fname_found = None
-            for potential_cfname in potential_color_fnames:
-                if potential_cfname in color_filenames:
-                    color_fname_found = potential_cfname
-                    break
-            
-            if not color_fname_found:
-                print(f"找不到 {bw_fname} 對應的彩色圖片 (嘗試的基底檔名: {original_base_name})")
-                continue
-
-            bw_img_path = os.path.join(bw_image_folder, bw_fname)
-            bw_img = Image.open(bw_img_path).convert('L').resize(target_size, Image.Resampling.LANCZOS)
-            l_channel = np.array(bw_img, dtype=float) / 255.0
-            X_l.append(l_channel.reshape(target_size[0], target_size[1], 1))
-
-            color_img_path = os.path.join(color_image_folder, color_fname_found)
-            color_img = Image.open(color_img_path).convert('RGB').resize(target_size, Image.Resampling.LANCZOS)
-            color_img_lab = rgb2lab(np.array(color_img))
-            
-            ab_channels = color_img_lab[:, :, 1:] / 128.0
-            Y_ab.append(ab_channels)
-
-            # 修改 embed_input 為隨機向量
-            X_embed.append(np.random.randn(1000)) # Changed from np.zeros(1000)
-            processed_files +=1
-
-        except FileNotFoundError:
-            print(f"找不到檔案：{bw_fname} 或其對應的彩色圖片。")
-        except Exception as e:
-            print(f"處理檔案 {bw_fname} 時發生錯誤: {e}")
-            
+    
+    with multiprocessing.Pool(processes=num_cpu) as pool:
+        # 使用 imap_unordered 以便與 tqdm 更好地整合，並在任務完成時立即處理結果
+        # results = []
+        # for result in tqdm(pool.imap_unordered(worker_fn, bw_filenames), total=len(bw_filenames), desc="並行載入與預處理圖像"):
+        #     if result is not None:
+        #         results.append(result)
+        
+        # 或者使用 map，如果不需要那麼細緻的進度 (tqdm 會在 map 開始前顯示總數，並在結束後完成)
+        # results = pool.map(worker_fn, bw_filenames)
+        
+        # 使用 imap_unordered 搭配參數元組列表
+        results_iterator = pool.imap_unordered(_process_single_image_pair_unpack, tasks)
+        
+        for result in tqdm(results_iterator, total=len(tasks), desc="並行載入與預處理圖像"):
+            if result is not None:
+                l_channel_data, embed_input_data, ab_channels_data = result
+                X_l_list.append(l_channel_data)
+                X_embed_list.append(embed_input_data)
+                Y_ab_list.append(ab_channels_data)
+                processed_files += 1
+    
     print(f"總共成功處理 {processed_files} 張圖片。")
     if processed_files == 0:
-        raise ValueError("沒有成功載入任何圖片，請檢查資料夾路徑和檔案格式。")
+        raise ValueError("沒有成功載入任何圖片，請檢查資料夾路徑和檔案格式或工作函數邏輯。")
 
-    return [np.array(X_l), np.array(X_embed)], np.array(Y_ab)
+    return [np.array(X_l_list), np.array(X_embed_list)], np.array(Y_ab_list)
 
+# 解包參數的輔助函數，因為 pool.imap/map 只接受單個參數的函數
+def _process_single_image_pair_unpack(args_tuple):
+    return _process_single_image_pair(*args_tuple)
 
 def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, learning_rate, save_path, loss_type='mse'):
     print(f"開始載入資料...")

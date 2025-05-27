@@ -55,10 +55,18 @@ def unet_vgg16(learning_rate=0.0001, loss_function_name='mse'):
 
     decoder_output = Conv2D(2, (1, 1), activation='tanh', padding='same')(decoder_c1)
     model = Model(inputs=[encoder_input, embed_input], outputs=decoder_output)
-    model.compile(optimizer=Adam(learning_rate=learning_rate), loss=MeanSquaredError(), metrics=[])
+    
+    if loss_function_name.lower() in ['mae', 'l1']:
+        loss_func = MeanAbsoluteError()
+        print(f"Compiling unet_vgg16 with Mean Absolute Error (L1) loss. Learning rate: {learning_rate}")
+    else:
+        loss_func = MeanSquaredError()
+        print(f"Compiling unet_vgg16 with Mean Squared Error (L2) loss. Learning rate: {learning_rate}")
+        
+    model.compile(optimizer=Adam(learning_rate=learning_rate), loss=loss_func, metrics=[])
     return model
 
-def best_version(learning_rate=0.0001):
+def best_version(learning_rate=0.0001, loss_function_name='mse'):
     print("*****best_version*****")
     encoder_input = Input(shape=(512, 512, 1,))
 
@@ -129,10 +137,18 @@ def best_version(learning_rate=0.0001):
 
     decoder_output = Conv2D(2, (1, 1), activation='tanh', padding='same')(decoder_c1)
     model = Model(inputs=[encoder_input, embed_input], outputs=decoder_output)
-    model.compile(optimizer=Adam(learning_rate=learning_rate), loss=MeanSquaredError(), metrics=[])
+
+    if loss_function_name.lower() in ['mae', 'l1']:
+        loss_func = MeanAbsoluteError()
+        print(f"Compiling best_version with Mean Absolute Error (L1) loss. Learning rate: {learning_rate}")
+    else:
+        loss_func = MeanSquaredError()
+        print(f"Compiling best_version with Mean Squared Error (L2) loss. Learning rate: {learning_rate}")
+
+    model.compile(optimizer=Adam(learning_rate=learning_rate), loss=loss_func, metrics=[])
     return model
 
-def unet_advanced_prelu(learning_rate=0.0001):
+def unet_advanced_prelu(learning_rate=0.0001, loss_function_name='mse'):
     print("*****unet_advanced_prelu (using PReLU)*****")
     encoder_input = Input(shape=(512, 512, 1,))
 
@@ -226,5 +242,13 @@ def unet_advanced_prelu(learning_rate=0.0001):
     decoder_output = Conv2D(2, (1, 1), activation='tanh', padding='same')(dec_c1)
     
     model = Model(inputs=[encoder_input, embed_input], outputs=decoder_output)
-    model.compile(optimizer=Adam(learning_rate=learning_rate), loss=MeanSquaredError(), metrics=[])
+
+    if loss_function_name.lower() in ['mae', 'l1']:
+        loss_func = MeanAbsoluteError()
+        print(f"Compiling unet_advanced_prelu with Mean Absolute Error (L1) loss. Learning rate: {learning_rate}")
+    else:
+        loss_func = MeanSquaredError()
+        print(f"Compiling unet_advanced_prelu with Mean Squared Error (L2) loss. Learning rate: {learning_rate}")
+
+    model.compile(optimizer=Adam(learning_rate=learning_rate), loss=loss_func, metrics=[])
     return model
