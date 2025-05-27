@@ -30,11 +30,11 @@ def load_and_preprocess_data(bw_image_folder, color_image_folder, target_size=(5
     """
     載入黑白圖片 (L 通道) 和對應的彩色圖片 (ab 通道作為目標)。
     圖片會被 resize 到 target_size。
+    embed_input 將使用隨機向量。
     """
-    X_l = []  # 輸入的 L 通道
-    X_embed = [] # 輸入的 embed (目前為零向量)
-    Y_ab = [] # 目標的 ab 通道
-
+    X_l = []
+    X_embed = [] # 將使用隨機向量
+    Y_ab = []
     bw_filenames = sorted(os.listdir(bw_image_folder))
     color_filenames = sorted(os.listdir(color_image_folder))
 
@@ -45,15 +45,13 @@ def load_and_preprocess_data(bw_image_folder, color_image_folder, target_size=(5
     processed_files = 0
     for bw_fname in tqdm(bw_filenames, desc="載入並預處理圖像"):
         try:
-            # 從黑白檔名推斷原始彩色檔名
-            base_name, bw_ext = os.path.splitext(bw_fname)
+            base_name, _ = os.path.splitext(bw_fname)
             if not base_name.endswith("_bw"):
                 print(f"跳過無法識別的黑白檔名: {bw_fname}")
                 continue
             
-            original_base_name = base_name[:-3] # 去掉 "_bw"
+            original_base_name = base_name[:-3]
             
-            # 嘗試找到對應的彩色圖片 (可能有多種副檔名)
             potential_color_fnames = [f"{original_base_name}{ext}" for ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif']]
             color_fname_found = None
             for potential_cfname in potential_color_fnames:
@@ -65,23 +63,20 @@ def load_and_preprocess_data(bw_image_folder, color_image_folder, target_size=(5
                 print(f"找不到 {bw_fname} 對應的彩色圖片 (嘗試的基底檔名: {original_base_name})")
                 continue
 
-            # 載入黑白圖片 (L channel for input)
             bw_img_path = os.path.join(bw_image_folder, bw_fname)
             bw_img = Image.open(bw_img_path).convert('L').resize(target_size, Image.Resampling.LANCZOS)
             l_channel = np.array(bw_img, dtype=float) / 255.0
             X_l.append(l_channel.reshape(target_size[0], target_size[1], 1))
 
-            # 載入原始彩色圖片並轉換到 Lab
             color_img_path = os.path.join(color_image_folder, color_fname_found)
             color_img = Image.open(color_img_path).convert('RGB').resize(target_size, Image.Resampling.LANCZOS)
             color_img_lab = rgb2lab(np.array(color_img))
             
-            # 提取 ab 通道作為目標，並標準化到 [-1, 1]
             ab_channels = color_img_lab[:, :, 1:] / 128.0
             Y_ab.append(ab_channels)
 
-            # 建立 placeholder embed_input
-            X_embed.append(np.zeros(1000))
+            # 修改 embed_input 為隨機向量
+            X_embed.append(np.random.randn(1000)) # Changed from np.zeros(1000)
             processed_files +=1
 
         except FileNotFoundError:

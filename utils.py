@@ -176,14 +176,10 @@ def plot_results(l_inputs_for_plot, predicted_rgbs, original_rgbs, psnr_scores, 
 
 def evaluate_model(model_path, test_l_folder, test_color_folder, results_save_dir="evaluation_results"):
     print(f"載入模型: {model_path}")
-    # 使用更新後的 custom_objects 載入模型
     model = load_model(model_path, custom_objects=custom_objects)
     model.summary()
 
     print("載入測試圖片...")
-    # l_images_input are for model input (normalized L channel)
-    # l_channels_for_lab are original L channels (0-100) for color reconstruction
-    # original_color_images_rgb are ground truth RGBs (0-255)
     l_images_input, l_channels_for_lab, original_color_images_rgb, filenames = load_test_image_pairs(test_l_folder, test_color_folder)
     
     num_test_images = len(l_images_input)
@@ -191,19 +187,16 @@ def evaluate_model(model_path, test_l_folder, test_color_folder, results_save_di
         print("錯誤: 未找到測試圖片，無法進行評估。")
         return
 
-    # 準備 embed_input (目前為全零向量，與訓練時一致)
-    # 假設模型輸入形狀是 512x512
-    embed_dim = model.input_shape[1][1] # Or simply 1000 if fixed
+    # 準備 embed_input (使用隨機向量，與訓練時一致)
+    embed_dim = model.input_shape[1][1] 
     # model.input_shape is a list for multiple inputs: [(None, 512, 512, 1), (None, 1000)]
-    test_embed_inputs = np.zeros((num_test_images, embed_dim))
+    test_embed_inputs = np.random.randn(num_test_images, embed_dim) # Changed from np.zeros
     
     print("對測試圖片進行預測...")
-    # 將 list of images 轉為 numpy array for model prediction
     test_l_inputs_np = np.array(l_images_input)
     predicted_ab = predict_ab_channels(model, test_l_inputs_np, test_embed_inputs)
     
     print("重建 RGB 圖像...")
-    # l_channels_for_lab is already a list of L channels (0-100)
     reconstructed_rgb_images = reconstruct_rgb_from_lab(l_channels_for_lab, predicted_ab)
     
     psnr_scores = []
@@ -216,9 +209,10 @@ def evaluate_model(model_path, test_l_folder, test_color_folder, results_save_di
         p, s = calculate_metrics(pred_rgb, orig_rgb)
         psnr_scores.append(p)
         ssim_scores.append(s)
-        # print(f"圖片 {filenames[i]}: PSNR={p:.2f}, SSIM={s:.4f}")
 
     print("繪製並儲存結果...")
+    # 將隨機的 embed_input 傳遞給 plot_results 以便可以選擇性地顯示或記錄 (如果需要)
+    # 目前 plot_results 不使用 embed_input，但為了未來擴展可以考慮傳入
     plot_results(test_l_inputs_np, reconstructed_rgb_images, original_color_images_rgb, psnr_scores, ssim_scores, filenames, save_dir=results_save_dir)
 
 if __name__ == '__main__':
