@@ -22,5 +22,9 @@ python main.py \
 ```
 
 ```
-python main.py --skip_training --trained_model_path trained_models/model_best_version_lr0p0001.h5 --test_l_dir test_data/l_channel --test_color_dir test_data/color --eval_results_dir ./my_run1_evaluation_only
+python main.py --skip_training \
+    --trained_model_path trained_models/model_best_version_lr0p0001.h5 \
+    --test_l_dir test_data/l_channel \
+    --test_color_dir test_data/color \  
+    --eval_results_dir my_run1_evaluation_only
 ```

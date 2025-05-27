@@ -40,7 +40,7 @@ if __name__ == '__main__':
     train_group = parser.add_argument_group('訓練參數')
     train_group.add_argument('--train_bw_dir', type=str, help="(訓練用) 黑白 (L 通道) 圖像資料夾路徑 (512x512)。如果--skip_training為True則非必要。")
     train_group.add_argument('--train_color_dir', type=str, help="(訓練用) 原始彩色圖像資料夾路徑。如果--skip_training為True則非必要。")
-    train_group.add_argument('--model_type', type=str, choices=['unet_vgg16', 'best_version'], default='best_version', help="要訓練的模型名稱。")
+    train_group.add_argument('--model_type', type=str, choices=['unet_vgg16', 'best_version', 'unet_advanced_prelu'], default='best_version', help="要訓練的模型名稱。")
     train_group.add_argument('--epochs', type=int, default=50, help="訓練的 epoch 數量。")
     train_group.add_argument('--batch_size', type=int, default=2, help="訓練的 batch_size (預設為2，因512x512圖片記憶體需求較高)。")
     train_group.add_argument('--lr', type=float, default=0.0001, help="學習率。")

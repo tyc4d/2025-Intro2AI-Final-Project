@@ -16,8 +16,11 @@ from keras.models import load_model
 # 為了處理 Keras 自訂物件 (如 LeakyReLU)，如果它是作為 activation function string ('leaky_relu') 應該沒問題
 # 但如果是 LeakyReLU(alpha=0.2) 物件，則需要 custom_objects
 # 由於 baseline.py 中 LeakyReLU 是直接實例化使用的，我們需要將其加入 custom_objects
-from keras.layers import LeakyReLU
-custom_objects = {'LeakyReLU': LeakyReLU}
+from keras.layers import LeakyReLU, PReLU
+custom_objects = {
+    'LeakyReLU': LeakyReLU,
+    'PReLU': PReLU
+}
 
 def load_test_image_pairs(l_folder, color_folder, target_size=(512, 512)):
     """
@@ -173,9 +176,9 @@ def plot_results(l_inputs_for_plot, predicted_rgbs, original_rgbs, psnr_scores, 
 
 def evaluate_model(model_path, test_l_folder, test_color_folder, results_save_dir="evaluation_results"):
     print(f"載入模型: {model_path}")
-    # 使用 custom_objects 處理 LeakyReLU (如果模型中用到)
+    # 使用更新後的 custom_objects 載入模型
     model = load_model(model_path, custom_objects=custom_objects)
-    model.summary() # 顯示模型結構
+    model.summary()
 
     print("載入測試圖片...")
     # l_images_input are for model input (normalized L channel)

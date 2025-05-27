@@ -113,8 +113,10 @@ def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, l
         model = baseline.unet_vgg16(learning_rate=learning_rate)
     elif model_name == 'best_version':
         model = baseline.best_version(learning_rate=learning_rate)
+    elif model_name == 'unet_advanced_prelu':
+        model = baseline.unet_advanced_prelu(learning_rate=learning_rate)
     else:
-        raise ValueError("未知的模型名稱。請選擇 'unet_vgg16' 或 'best_version'。")
+        raise ValueError("未知的模型名稱。請選擇 'unet_vgg16', 'best_version' 或 'unet_advanced_prelu'。")
 
     model.summary()
 
@@ -141,7 +143,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="訓練圖像上色模型")
     parser.add_argument('--bw_dir', type=str, required=True, help="包含黑白 (L 通道) 圖像的資料夾路徑 (應為 512x512)。")
     parser.add_argument('--color_dir', type=str, required=True, help="包含原始彩色圖像的資料夾路徑。")
-    parser.add_argument('--model', type=str, choices=['unet_vgg16', 'best_version'], default='best_version', help="要訓練的模型名稱。")
+    parser.add_argument('--model', type=str, choices=['unet_vgg16', 'best_version', 'unet_advanced_prelu'], default='best_version', help="要訓練的模型名稱。")
     parser.add_argument('--epochs', type=int, default=50, help="訓練的 epoch 數量。")
     parser.add_argument('--batch_size', type=int, default=16, help="訓練的 batch_size。")
     parser.add_argument('--lr', type=float, default=0.0001, help="學習率。")
