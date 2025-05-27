@@ -6,9 +6,18 @@ venv/
 # C extensions
 *.so
 *.zip
+
+
+# Data
+
 data/
 1000img-paul/
 ref_unet/
+test_data/
+trained_models/
+bw*
+
+
 # Distribution / packaging
 .Python
 build/
