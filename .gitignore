@@ -2,10 +2,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+venv/
 # C extensions
 *.so
-
+*.zip
+data/
+1000img-paul/
+ref_unet/
 # Distribution / packaging
 .Python
 build/
