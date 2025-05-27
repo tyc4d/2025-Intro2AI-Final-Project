@@ -91,7 +91,7 @@ def load_and_preprocess_data(bw_image_folder, color_image_folder, target_size=(5
     return [np.array(X_l), np.array(X_embed)], np.array(Y_ab)
 
 
-def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, learning_rate, save_path):
+def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, learning_rate, save_path, loss_type='mse'):
     print(f"開始載入資料...")
     # 假設 file_converter.py 將彩色圖片轉換為灰階並儲存在 bw_image_dir
     # color_image_dir 應該是原始彩色圖片的資料夾
@@ -103,13 +103,13 @@ def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, l
         print("錯誤：沒有成功載入任何訓練資料。請檢查您的圖片資料夾和檔名。")
         return
 
-    print(f"選擇模型: {model_name}")
+    print(f"選擇模型: {model_name}, 使用損失函數: {loss_type.upper()}")
     if model_name == 'unet_vgg16':
-        model = baseline.unet_vgg16(learning_rate=learning_rate)
+        model = baseline.unet_vgg16(learning_rate=learning_rate, loss_function_name=loss_type)
     elif model_name == 'best_version':
-        model = baseline.best_version(learning_rate=learning_rate)
+        model = baseline.best_version(learning_rate=learning_rate, loss_function_name=loss_type)
     elif model_name == 'unet_advanced_prelu':
-        model = baseline.unet_advanced_prelu(learning_rate=learning_rate)
+        model = baseline.unet_advanced_prelu(learning_rate=learning_rate, loss_function_name=loss_type)
     else:
         raise ValueError("未知的模型名稱。請選擇 'unet_vgg16', 'best_version' 或 'unet_advanced_prelu'。")
 
@@ -145,6 +145,7 @@ if __name__ == '__main__':
     # 修改 output_name_template 為 save_path
     parser.add_argument('--save_path', type=str, required=True, 
                         help="儲存訓練後模型的完整檔案路徑 (例如：trained_models/model_best_version_lr0p0001.h5)。")
+    parser.add_argument('--loss_type', type=str, choices=['mse', 'mae', 'l1'], default='mse', help="要使用的損失函數類型 (mse 或 mae/l1)。")
 
     args = parser.parse_args()
     
@@ -155,12 +156,12 @@ if __name__ == '__main__':
         os.makedirs(output_model_dir)
         print(f"已建立模型儲存資料夾: {output_model_dir} (來自 __main__)")
 
-    train_model(args.bw_dir, args.color_dir, args.model, args.epochs, args.batch_size, args.lr, args.save_path) # 傳遞 args.save_path
+    train_model(args.bw_dir, args.color_dir, args.model, args.epochs, args.batch_size, args.lr, args.save_path, args.loss_type) # 傳遞 args.loss_type
 
     # 如何執行 (假設 bw_images_512 和 1000img-paul):
-    # python train.py --bw_dir bw_images_512 --color_dir 1000img-paul --model best_version --epochs 10 --batch_size 2 --lr 0.0001 --save_path trained_models/my_model.h5
+    # python train.py --bw_dir bw_images_512 --color_dir 1000img-paul --model best_version --epochs 10 --batch_size 2 --lr 0.0001 --save_path trained_models/my_model.h5 --loss_type mae
 
     # 如何執行:
     # python train.py --bw_dir path/to/your/bw_images --color_dir path/to/your/original_color_images --model best_version --epochs 50 --batch_size 8 --lr 0.0001 --save_path trained_models/trained_colorizer.h5
     # 假設您的黑白圖片在 'bw_images' 資料夾，原始彩色圖片在 '1000img-paul' 資料夾:
-    # python train.py --bw_dir bw_images --color_dir 1000img-paul --model best_version --epochs 10 --batch_size 4 
+    # python train.py --bw_dir bw_images --color_dir 1000img-paul --model best_version --epochs 10 --batch_size 4 --loss_type mae 

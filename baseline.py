@@ -1,10 +1,10 @@
 from keras.layers import Input, Conv2D, MaxPooling2D, Reshape, RepeatVector, Conv2DTranspose, concatenate, LeakyReLU, PReLU
 from keras.models import Model
 from keras.optimizers import Adam
-from keras.losses import MeanSquaredError
+from keras.losses import MeanSquaredError, MeanAbsoluteError
 
 
-def unet_vgg16(learning_rate=0.0001):
+def unet_vgg16(learning_rate=0.0001, loss_function_name='mse'):
     print("*****unet_vgg16*****")
     encoder_input = Input(shape=(512, 512, 1,))
 

@@ -44,7 +44,8 @@ if __name__ == '__main__':
     train_group.add_argument('--epochs', type=int, default=50, help="訓練的 epoch 數量。")
     train_group.add_argument('--batch_size', type=int, default=2, help="訓練的 batch_size (預設為2，因512x512圖片記憶體需求較高)。")
     train_group.add_argument('--lr', type=float, default=0.0001, help="學習率。")
-    train_group.add_argument('--model_output_template', type=str, default="trained_models/model_[model_type]_lr[lr].h5",
+    train_group.add_argument('--loss_type', type=str, choices=['mse', 'mae', 'l1'], default='mse', help="(訓練用) 要使用的損失函數類型 (mse 或 mae/l1)。如果--skip_training為True則非必要。")
+    train_group.add_argument('--model_output_template', type=str, default="trained_models/model_[model_type]_loss[loss_type]_lr[lr].h5",
                         help="儲存訓練後模型的檔案名稱模板。預設會在 'trained_models' 子資料夾下。")
 
     # === 評估參數 ===
@@ -74,6 +75,7 @@ if __name__ == '__main__':
         # 根據模板和參數確定模型將儲存的路徑
         lr_str_format = str(args.lr).replace('.', 'p')
         model_save_path = args.model_output_template.replace('[model_type]', args.model_type).replace('[lr]', lr_str_format)
+        model_save_path = model_save_path.replace('[loss_type]', args.loss_type)
         
         # 確保模型輸出資料夾存在
         model_output_dir = os.path.dirname(model_save_path)
@@ -88,7 +90,8 @@ if __name__ == '__main__':
             epochs=args.epochs,
             batch_size=args.batch_size,
             learning_rate=args.lr,
-            save_path=model_save_path # train_model 內部會使用此模板生成完整檔名並儲存
+            save_path=model_save_path, # train_model 內部會使用此模板生成完整檔名並儲存
+            loss_type=args.loss_type  # 傳遞 loss_type
         )
         final_model_path_to_evaluate = model_save_path # train_model 儲存模型於此路徑
         print(f"--- 訓練完成。模型已儲存至: {final_model_path_to_evaluate} ---")
@@ -124,11 +127,14 @@ if __name__ == '__main__':
     print(f"評估結果已儲存於: {os.path.abspath(args.eval_results_dir)}")
 
 # === 如何執行 ===
-# 1. 訓練並評估:
-# python main.py --train_bw_dir bw_images_512 --train_color_dir 1000img-paul --model_type best_version --epochs 10 --batch_size 2 --lr 0.0001 --test_l_dir path/to/your/test_l_images --test_color_dir path/to/your/test_color_images --eval_results_dir evaluation_output
+# 1. 訓練並評估 (使用 MSE):
+# python main.py --train_bw_dir bw_images_512 --train_color_dir 1000img-paul --model_type best_version --epochs 10 --batch_size 2 --lr 0.0001 --loss_type mse --test_l_dir path/to/your/test_l_images --test_color_dir path/to/your/test_color_images --eval_results_dir evaluation_output
 #
-# 2. 僅評估 (假設模型已訓練並儲存於 trained_models/model_best_version_lr0p0001.h5):
-# python main.py --skip_training --trained_model_path trained_models/model_best_version_lr0p0001.h5 --test_l_dir path/to/your/test_l_images --test_color_dir path/to/your/test_color_images --eval_results_dir evaluation_output
+# 1.1 訓練並評估 (使用 MAE):
+# python main.py --train_bw_dir bw_images_512 --train_color_dir 1000img-paul --model_type best_version --epochs 10 --batch_size 2 --lr 0.0001 --loss_type mae --test_l_dir path/to/your/test_l_images --test_color_dir path/to/your/test_color_images --eval_results_dir evaluation_output
+#
+# 2. 僅評估 (假設模型已訓練並儲存於 trained_models/model_best_version_lossmae_lr0p0001.h5):
+# python main.py --skip_training --trained_model_path trained_models/model_best_version_lossmae_lr0p0001.h5 --test_l_dir path/to/your/test_l_images --test_color_dir path/to/your/test_color_images --eval_results_dir evaluation_output
 #
 # 請將 path/to/your/test_l_images 和 path/to/your/test_color_images 替換為您實際的測試圖片資料夾路徑。
 # 訓練用的 bw_images_512 和 1000img-paul 也應為您的實際路徑。 
