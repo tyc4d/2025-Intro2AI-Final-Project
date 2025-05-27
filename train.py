@@ -8,6 +8,7 @@ from keras.callbacks import Callback
 import baseline # 從 baseline.py 匯入模型
 import multiprocessing # 新增
 from functools import partial # 可能用於簡化參數傳遞
+import matplotlib.pyplot as plt # 新增 matplotlib 匯入
 
 # TQDM Callback for Keras
 class TQDMProgressBar(Callback):
@@ -166,13 +167,10 @@ def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, l
     print("開始訓練模型...")
     # 使用 TQDM Callback
     tqdm_callback = TQDMProgressBar()
-    model.fit(X, Y, batch_size=batch_size, epochs=epochs, verbose=0, callbacks=[tqdm_callback]) # verbose=0 因為我們有自訂的 callback
+    history_callback = model.fit(X, Y, batch_size=batch_size, epochs=epochs, verbose=0, callbacks=[tqdm_callback]) # verbose=0 因為我們有自訂的 callback
 
     print("訓練完成。")
-    # 直接使用傳入的 save_path 儲存模型
-    # 不需要再根據模板生成檔名
     
-    # 確保儲存模型的目錄存在 (雖然 main.py 應該已經處理了，但這裡加一道保險)
     output_dir = os.path.dirname(save_path)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -180,6 +178,29 @@ def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, l
         
     model.save(save_path)
     print(f"模型已儲存至 {save_path}")
+
+    # --- 繪製並儲存損失曲線 ---
+    try:
+        plt.figure(figsize=(10, 6))
+        plt.plot(history_callback.history['loss'], label='Train Loss')
+        # 如果將來有驗證集，可以取消註解以下行:
+        # if 'val_loss' in history_callback.history:
+        #     plt.plot(history_callback.history['val_loss'], label='Validation Loss')
+        plt.title(f'Model Loss Curve ({model_name}, {loss_type.upper()})')
+        plt.ylabel('Loss')
+        plt.xlabel('Epoch')
+        plt.legend(loc='upper right')
+        plt.grid(True)
+        
+        # 儲存損失曲線圖
+        base_save_path, ext = os.path.splitext(save_path)
+        loss_curve_save_path = f"{base_save_path}_loss_curve.png"
+        plt.savefig(loss_curve_save_path)
+        plt.close() # 關閉圖形以釋放資源
+        print(f"損失曲線圖已儲存至: {loss_curve_save_path}")
+    except Exception as e:
+        print(f"繪製損失曲線時發生錯誤: {e}")
+    # --- 損失曲線結束 ---
 
 
 if __name__ == '__main__':
