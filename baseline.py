@@ -1,4 +1,4 @@
-from keras.layers import Input, Conv2D, MaxPooling2D, Reshape, RepeatVector, Conv2DTranspose, concatenate, LeakyReLU, PReLU
+from keras.layers import Input, Conv2D, MaxPooling2D, Reshape, RepeatVector, Conv2DTranspose, concatenate, LeakyReLU, PReLU, BatchNormalization
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.losses import MeanSquaredError, MeanAbsoluteError
@@ -252,3 +252,121 @@ def unet_advanced_prelu(learning_rate=0.0001, loss_function_name='mse'):
 
     model.compile(optimizer=Adam(learning_rate=learning_rate), loss=loss_func, metrics=[])
     return model
+
+# Alias for best_version, as it was previously named unet_relu_leaky
+# def best_version(learning_rate=0.0001, loss_function_name='mse'):
+# return unet_relu_leaky(learning_rate=learning_rate, loss_function_name=loss_function_name)
+
+
+def build_discriminator(input_shape=(512, 512, 3)):
+    """
+    建立一個 PatchGAN 判別器模型。
+    輸入是 (L + ab) 通道圖像。
+    輸出是一個 30x30x1 的 patch，其中每個值代表對應圖像區域為真實的機率。
+    """
+    print("*****Building Discriminator (PatchGAN)*****")
+    init = 'glorot_uniform' # Kernel initializer
+
+    # 輸入 L + ab 通道 (512x512x3)
+    in_src_image = Input(shape=input_shape) # L channel
+    # in_target_image = Input(shape=(input_shape[0], input_shape[1], 2)) # ab channels
+    # merged = concatenate([in_src_image, in_target_image]) # Concatenate L and ab
+
+    # C64: 4x4 stride 2x2
+    d = Conv2D(64, (4,4), strides=(2,2), padding='same', kernel_initializer=init)(in_src_image)
+    d = LeakyReLU(alpha=0.2)(d)
+    # C128: 4x4 stride 2x2
+    d = Conv2D(128, (4,4), strides=(2,2), padding='same', kernel_initializer=init)(d)
+    d = BatchNormalization()(d)
+    d = LeakyReLU(alpha=0.2)(d)
+    # C256: 4x4 stride 2x2
+    d = Conv2D(256, (4,4), strides=(2,2), padding='same', kernel_initializer=init)(d)
+    d = BatchNormalization()(d)
+    d = LeakyReLU(alpha=0.2)(d)
+    # C512: 4x4 stride 1x1 (stride was 2x2 in some implementations, but for 30x30 output from 256, maybe 1x1 or adjust padding)
+    # Let's adjust stride to 1 for the last two conv layers before the patch output, or adjust padding.
+    # Given 512 -> 256 -> 128 -> 64. If next is stride 2 -> 32. Patch output usually 30x30 or 16x16.
+    
+    d = Conv2D(512, (4,4), padding='same', kernel_initializer=init)(d) # Stride 1 after 64x64
+    d = BatchNormalization()(d)
+    d = LeakyReLU(alpha=0.2)(d)
+    
+    # Second last layer:
+    d = Conv2D(512, (4,4), padding='same', kernel_initializer=init)(d)
+    d = BatchNormalization()(d)
+    d = LeakyReLU(alpha=0.2)(d)
+
+    # Patch output
+    patch_out = Conv2D(1, (4,4), padding='same', kernel_initializer=init, activation='sigmoid')(d) # Output is a 64x64 patch prediction
+    
+    # Define model
+    model = Model(in_src_image, patch_out)
+    # Compile model with Adam optimizer and binary cross-entropy loss
+    # Learning rate for discriminator is often different from generator
+    # model.compile(loss='binary_crossentropy', optimizer=Adam(learning_rate=0.0002, beta_1=0.5), metrics=['accuracy'])
+    return model
+
+def define_gan(g_model, d_model, image_shape_l=(512,512,1), embed_dim=1000):
+    """
+    定義組合的 GAN 模型，用於訓練生成器。
+    判別器的權重在此模型中設定為不可訓練。
+    """
+    print("*****Defining Combined GAN model*****")
+    # Make weights in the discriminator not trainable
+    for layer in d_model.layers:
+        if not isinstance(layer, BatchNormalization): # BN layers should be trainable
+            layer.trainable = False
+
+    # Generator input (L channel and embedding)
+    gen_input_l = Input(shape=image_shape_l, name="gan_gen_input_l")
+    gen_input_embed = Input(shape=(embed_dim,), name="gan_gen_input_embed")
+    
+    # Generator output (ab channels)
+    # This is the actual output from the generator model G
+    gen_output_ab = g_model([gen_input_l, gen_input_embed]) # This is 512x512x2
+    
+    # Concatenate L channel (from generator input) with generated ab channels
+    # This forms the input for the discriminator D
+    gan_input_for_discriminator = concatenate([gen_input_l, gen_output_ab], name="gan_concat_for_disc") # Should be 512x512x3
+        
+    # Discriminator output (the "adversarial" part)
+    # This is D(G(L, embed))
+    discriminator_output_on_fake = d_model(gan_input_for_discriminator)
+    
+    # Define GAN model: inputs are G's inputs, outputs are [D's output on fake, G's direct output]
+    # This allows us to have two losses: one for fooling D, one for L1 reconstruction on G's output.
+    model = Model(
+        inputs=[gen_input_l, gen_input_embed], 
+        outputs=[discriminator_output_on_fake, gen_output_ab], 
+        name="gan_model"
+    )
+    
+    # Compile model - this will be done in train.py with appropriate optimizers and loss weights
+    # Example (actual compilation in train.py):
+    # opt_gan = Adam(learning_rate=0.0002, beta_1=0.5)
+    # model.compile(loss=['binary_crossentropy', 'mae'], 
+    #               loss_weights=[1, 100], # Example: adversarial_weight=1, l1_weight=100
+    #               optimizer=opt_gan)
+    return model
+
+# Example usage (for testing purposes, will be integrated into train.py)
+if __name__ == '__main__':
+    # Test Generator (using one of the existing U-Net models)
+    # Make sure the generator's output shape is (batch, 512, 512, 2)
+    # And its inputs are (batch, 512, 512, 1) and (batch, 1000)
+    
+    # generator = unet_relu_leaky() # Or any other U-Net generator
+    # generator.summary()
+
+    # Test Discriminator
+    # Input to discriminator will be (batch, 512, 512, 3) -> (L, a, b)
+    # discriminator = build_discriminator(input_shape=(512, 512, 3))
+    # discriminator.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5), metrics=['accuracy'])
+    # discriminator.summary()
+    
+    # Test Combined GAN
+    # gan_model = define_gan(generator, discriminator)
+    # gan_model.compile(loss='binary_crossentropy', optimizer=Adam(0.0002, 0.5)) # Adversarial loss
+    # gan_model.summary()
+    print("GAN components (Generator, Discriminator, Combined GAN) can be defined.")
+    print("Actual compilation with optimizers and losses will be handled in the training script.")
