@@ -12,6 +12,9 @@ venv/
 
 data/
 1000img-paul/
+500img-paul/
+200img-paul/
+100img-paul/
 ref_unet/
 test_data/
 trained_models/

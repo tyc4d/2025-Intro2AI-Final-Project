@@ -66,8 +66,8 @@ def unet_vgg16(learning_rate=0.0001, loss_function_name='mse'):
     model.compile(optimizer=Adam(learning_rate=learning_rate), loss=loss_func, metrics=[])
     return model
 
-def best_version(learning_rate=0.0001, loss_function_name='mse'):
-    print("*****best_version*****")
+def unet_relu_leaky(learning_rate=0.0001, loss_function_name='mse'):
+    print("*****unet_relu_leaky*****")
     encoder_input = Input(shape=(512, 512, 1,))
 
     encoder_c1 = Conv2D(16, (3, 3), padding='same')(encoder_input)
