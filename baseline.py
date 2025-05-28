@@ -68,6 +68,7 @@ def unet_vgg16(learning_rate=0.0001, loss_function_name='mse'):
 
 def unet_relu_leaky(learning_rate=0.0001, loss_function_name='mse', use_zero_embedding=True):
     print("*****unet_relu_leaky*****")
+    use_zero_embedding=True
     encoder_input = Input(shape=(512, 512, 1,))
 
     encoder_c1 = Conv2D(16, (3, 3), padding='same')(encoder_input)
