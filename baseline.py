@@ -1,4 +1,4 @@
-from keras.layers import Input, Conv2D, MaxPooling2D, Reshape, RepeatVector, Conv2DTranspose, concatenate, LeakyReLU, PReLU, BatchNormalization
+from keras.layers import Input, Conv2D, MaxPooling2D, Reshape, RepeatVector, Conv2DTranspose, concatenate, LeakyReLU, PReLU, BatchNormalization, Lambda
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.losses import MeanSquaredError, MeanAbsoluteError
@@ -66,7 +66,7 @@ def unet_vgg16(learning_rate=0.0001, loss_function_name='mse'):
     model.compile(optimizer=Adam(learning_rate=learning_rate), loss=loss_func, metrics=[])
     return model
 
-def unet_relu_leaky(learning_rate=0.0001, loss_function_name='mse'):
+def unet_relu_leaky(learning_rate=0.0001, loss_function_name='mse', use_zero_embedding=True):
     print("*****unet_relu_leaky*****")
     encoder_input = Input(shape=(512, 512, 1,))
 
@@ -98,7 +98,18 @@ def unet_relu_leaky(learning_rate=0.0001, loss_function_name='mse'):
     middle_in = LeakyReLU(alpha=0.2)(middle_in)
     middle_in = Conv2D(256, (3, 3), padding='same')(middle_in)
     middle_in = LeakyReLU(alpha=0.2)(middle_in)
-    embed_input = Input(shape=(1000,))
+    embed_input_original = Input(shape=(1000,))
+
+    if use_zero_embedding:
+        # Create a zero tensor with the same shape as embed_input_original
+        # Note: Keras functional API requires tensors. We use a Lambda layer to create a constant tensor.
+        # The Lambda layer will take the original embed_input but ignore it and output zeros.
+        embed_input = Lambda(lambda x: x * 0)(embed_input_original)
+        print("Using zero embedding for unet_relu_leaky.")
+    else:
+        embed_input = embed_input_original
+        print("Using standard embedding for unet_relu_leaky.")
+
     fusion_output = RepeatVector(32 * 32)(embed_input)
     fusion_output = Reshape(([32, 32, 1000]))(fusion_output)
     fusion_output = concatenate([middle_in, fusion_output], axis=3)
@@ -136,7 +147,8 @@ def unet_relu_leaky(learning_rate=0.0001, loss_function_name='mse'):
     decoder_c1 = LeakyReLU(alpha=0.2)(decoder_c1)
 
     decoder_output = Conv2D(2, (1, 1), activation='tanh', padding='same')(decoder_c1)
-    model = Model(inputs=[encoder_input, embed_input], outputs=decoder_output)
+    
+    model = Model(inputs=[encoder_input, embed_input_original], outputs=decoder_output)
 
     if loss_function_name.lower() in ['mae', 'l1']:
         loss_func = MeanAbsoluteError()
