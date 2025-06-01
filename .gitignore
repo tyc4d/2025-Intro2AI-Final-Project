@@ -20,7 +20,10 @@ data/
 1000img-paul_bw/
 dataimg-tyc_bw/
 daterule/
+daterule-img_bw
 Manga109/
+my_*/
+comparison_experiments_1000img/
 
 ref_unet/
 test_data/
