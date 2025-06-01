@@ -18,6 +18,7 @@ trained_model/
 predictions/
 output/
 generator_model.keras
+SSIM_PIL/
 
 # 圖片資料夾
 100image/
