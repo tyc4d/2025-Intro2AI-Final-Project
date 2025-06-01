@@ -4,12 +4,12 @@ import numpy as np
 from PIL import Image
 from skimage.color import rgb2lab, lab2rgb # skimage 用於色彩空間轉換
 from tqdm import tqdm
-from keras.callbacks import Callback
+from tensorflow.keras.callbacks import Callback
 import tensorflow as tf # For Adam and losses
-from keras.losses import MeanAbsoluteError, BinaryCrossentropy
-from keras.optimizers import Adam
+from tensorflow.keras.losses import MeanAbsoluteError, MeanSquaredError, BinaryCrossentropy
+from tensorflow.keras.optimizers import Adam
 import baseline # 從 baseline.py 匯入模型
-from baseline import build_discriminator, define_gan # GAN components
+import model as model_definitions # 從 model.py 匯入模型定義
 import multiprocessing # 新增
 from functools import partial # 可能用於簡化參數傳遞
 import matplotlib.pyplot as plt # 新增 matplotlib 匯入
@@ -198,14 +198,14 @@ def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, l
         return
 
     print(f"選擇模型: {model_name}, 使用損失函數: {loss_type.upper()}")
-    if model_name == 'unet_vgg16':
+    if model_name.lower() == 'unet_vgg16':
         model = baseline.unet_vgg16(learning_rate=learning_rate, loss_function_name=loss_type)
-    elif model_name == 'unet_relu_leaky':
-        model = baseline.unet_relu_leaky(learning_rate=learning_rate, loss_function_name=loss_type)
-    elif model_name == 'unet_advanced_prelu':
-        model = baseline.unet_advanced_prelu(learning_rate=learning_rate, loss_function_name=loss_type)
+    elif model_name.lower() == 'unet_relu_leaky' or model_name.lower() == 'best_version': # best_version is an alias
+        model = baseline.unet_relu_leaky(learning_rate=learning_rate, loss_function_name=loss_type) 
+    elif model_name.lower() == 'unet_advanced_prelu':
+        model = model_definitions.unet_advanced_prelu(learning_rate=learning_rate, loss_function_name=loss_type)
     else:
-        raise ValueError("未知的模型名稱。請選擇 'unet_vgg16', 'unet_relu_leaky' 或 'unet_advanced_prelu'。")
+        raise ValueError(f"未知的模型名稱: {model_name}。請選擇 'unet_vgg16', 'unet_relu_leaky', 'best_version', 或 'unet_advanced_prelu'。")
 
     model.summary()
 
@@ -248,91 +248,76 @@ def train_model(bw_image_dir, color_image_dir, model_name, epochs, batch_size, l
     # --- 損失曲線結束 ---
 
 def get_generator_model(model_name, learning_rate, loss_function_name):
-    if model_name == 'unet_vgg16':
+    if model_name.lower() == 'unet_vgg16':
         g_model = baseline.unet_vgg16(learning_rate=learning_rate, loss_function_name=loss_function_name)
-    elif model_name == 'unet_relu_leaky':
+    elif model_name.lower() == 'unet_relu_leaky' or model_name.lower() == 'best_version':
         g_model = baseline.unet_relu_leaky(learning_rate=learning_rate, loss_function_name=loss_function_name)
-    elif model_name == 'unet_advanced_prelu':
-        g_model = baseline.unet_advanced_prelu(learning_rate=learning_rate, loss_function_name=loss_function_name)
+    elif model_name.lower() == 'unet_advanced_prelu':
+        g_model = model_definitions.unet_advanced_prelu(learning_rate=learning_rate, loss_function_name=loss_function_name)
     else:
-        raise ValueError(f"Unknown generator model name: {model_name}")
+        raise ValueError(f"未知的生成器模型名稱: {model_name}")
     return g_model
 
 def train_gan(
     bw_image_dir, color_image_dir, generator_model_name, epochs, batch_size, 
-    g_optimizer_lr_recon, # Learning rate for U-Net like part when compiled standalone (might not be used if GAN model handles all G updates)
+    g_optimizer_lr_recon, 
     d_optimizer_lr, 
     gan_optimizer_lr, 
     lambda_l1, 
     save_path, 
-    loss_type_g_recon='mae' # MAE (L1) is typical for image-to-image GANs
+    loss_type_g_recon='mae' 
 ):
-    print(f"Starting data loading for GAN training...")
-    # X_gen_input = [L_for_gen, embed_input], Y_ab_real = real_ab_channels, X_l_disc_input = L_for_discriminator
-    [X_L_gen, X_embed], Y_ab_real, X_L_disc = load_and_preprocess_data(bw_image_dir, color_image_dir, for_gan=True)
+    print(f"開始為 GAN 載入資料...")
+    # For GAN, load_and_preprocess_data should return L_gen, embed, AB_real, L_disc
+    # Let's assume X_gen = [L_for_gen, embed_for_gen], Y_real_ab, X_l_for_disc
+    [X_l_gen, X_embed], Y_real_ab, X_l_disc_real = load_and_preprocess_data(bw_image_dir, color_image_dir, for_gan=True)
     
-    print(f"GAN Data: Gen L shape: {X_L_gen.shape}, Embed shape: {X_embed.shape}, Real AB shape: {Y_ab_real.shape}, Disc L shape: {X_L_disc.shape}")
-    if X_L_gen.shape[0] == 0: print("Error: No training data loaded for GAN."); return
+    print(f"GAN 資料載入完成。 L_gen: {X_l_gen.shape}, Embed: {X_embed.shape}, AB_real: {Y_real_ab.shape}, L_disc_real: {X_l_disc_real.shape}")
 
-    dataset_size = X_L_gen.shape[0]
-    n_batches = dataset_size // batch_size
-    image_shape_l = X_L_gen.shape[1:] # (512, 512, 1)
-    image_shape_ab = Y_ab_real.shape[1:] # (512, 512, 2)
-    image_shape_lab_disc = (image_shape_l[0], image_shape_l[1], image_shape_l[2] + image_shape_ab[2]) # (512,512,3)
+    if X_l_gen.shape[0] == 0:
+        print("錯誤：沒有成功載入任何訓練資料。")
+        return
 
-    # --- Build and Compile Models ---
-    # 1. Generator (U-Net)
-    # The generator isn't compiled with its own optimizer if its weights are only updated via the GAN model.
-    # However, it's useful to have it defined as a Keras model for predictions and saving.
-    g_model = get_generator_model(generator_model_name, learning_rate=g_optimizer_lr_recon, loss_function_name=loss_type_g_recon)
-    print("--- Generator Summary ---")
-    g_model.summary()
-
-    # 2. Discriminator (PatchGAN)
-    d_model = build_discriminator(input_shape=image_shape_lab_disc) 
-    d_optimizer = Adam(learning_rate=d_optimizer_lr, beta_1=0.5, beta_2=0.999)
+    # 1. 建立與編譯判別器 D
+    d_model = model_definitions.build_discriminator() # 從 model.py 導入
+    d_optimizer = Adam(learning_rate=d_optimizer_lr, beta_1=0.5)
     d_model.compile(loss='binary_crossentropy', optimizer=d_optimizer, metrics=['accuracy'])
-    print("--- Discriminator Summary (compiled) ---")
-    d_model.summary()
-    # Determine discriminator patch shape dynamically from its output
-    # Create a dummy input of the correct shape for the discriminator
-    dummy_disc_input = np.zeros((1,) + image_shape_lab_disc)
-    patch_output_shape = d_model.predict(dummy_disc_input).shape[1:] # e.g. (64, 64, 1)
-    print(f"Discriminator patch output shape: {patch_output_shape}")
 
+    # 2. 建立生成器 G
+    # G 的 loss_function_name 這裡用作 L1/MAE loss，不是 GAN loss 的一部分
+    g_model = get_generator_model(generator_model_name, learning_rate=g_optimizer_lr_recon, loss_function_name=loss_type_g_recon)
 
-    # 3. Combined GAN model (Generator + Discriminator)
-    # Discriminator weights are frozen in this model (handled in define_gan)
-    gan_model = define_gan(g_model, d_model, image_shape_l=image_shape_l, embed_dim=X_embed.shape[1])
-    gan_optimizer = Adam(learning_rate=gan_optimizer_lr, beta_1=0.5, beta_2=0.999)
-    # Compile with two losses: one for adversarial (binary_crossentropy on D's output), one for L1 (mae on G's output)
-    gan_model.compile(loss=['binary_crossentropy', 'mae'], 
-                      loss_weights=[1, lambda_l1], 
-                      optimizer=gan_optimizer)
-    print("--- Combined GAN Model Summary (compiled) ---")
-    gan_model.summary()
+    # 3. 建立與編譯組合 GAN 模型 (D 的權重設為不可訓練)
+    # define_gan 現在從 model.py 導入
+    gan_model = model_definitions.define_gan(g_model, d_model, image_shape_l=X_l_gen.shape[1:], embed_dim=X_embed.shape[1])
+    gan_optimizer = Adam(learning_rate=gan_optimizer_lr, beta_1=0.5)
+    # GAN 模型有兩個輸出：判別器對假圖片的輸出，和生成器直接輸出的 ab 通道
+    # 因此有兩個損失：二元交叉熵 (對抗損失) 和 MAE (L1 重建損失)
+    gan_model.compile(loss=[BinaryCrossentropy(), MeanAbsoluteError()], 
+                      optimizer=gan_optimizer, 
+                      loss_weights=[1, lambda_l1]) # lambda_l1 控制 L1 損失的權重
 
     # --- Training Loop ---
-    print(f"\nStarting GAN training for {epochs} epochs, {n_batches} batches per epoch...")
+    print(f"\nStarting GAN training for {epochs} epochs, {X_l_gen.shape[0] // batch_size} batches per epoch...")
     d_losses, g_adv_losses, g_l1_losses, g_total_losses = [], [], [], []
     
     # Labels for discriminator training
-    real_labels = np.ones((batch_size,) + patch_output_shape)
-    fake_labels = np.zeros((batch_size,) + patch_output_shape)
+    real_labels = np.ones((batch_size,) + d_model.output_shape[1:])
+    fake_labels = np.zeros((batch_size,) + d_model.output_shape[1:])
 
-    gan_progress_bar = TQDMGANProgressBar(total_batches=n_batches, epochs=epochs)
+    gan_progress_bar = TQDMGANProgressBar(total_batches=X_l_gen.shape[0] // batch_size, epochs=epochs)
 
     for epoch in range(epochs):
         gan_progress_bar.on_epoch_begin(epoch)
         epoch_d_loss_acc, epoch_g_adv_loss_acc, epoch_g_l1_loss_acc, epoch_g_total_loss_acc = 0, 0, 0, 0
 
-        for batch_i in range(n_batches):
+        for batch_i in range(X_l_gen.shape[0] // batch_size):
             # 1. Select a random batch of real images
-            idx = np.random.randint(0, dataset_size, batch_size)
-            batch_L_gen = X_L_gen[idx]
+            idx = np.random.randint(0, X_l_gen.shape[0], batch_size)
+            batch_L_gen = X_l_gen[idx]
             batch_embed = X_embed[idx]
-            batch_ab_real = Y_ab_real[idx]
-            batch_L_disc = X_L_disc[idx] # L channel for discriminator input
+            batch_ab_real = Y_real_ab[idx]
+            batch_L_disc = X_l_disc_real[idx] # L channel for discriminator input
 
             # 2. Generate a batch of fake images (ab channels)
             batch_ab_fake = g_model.predict([batch_L_gen, batch_embed], verbose=0)
@@ -371,10 +356,10 @@ def train_gan(
             })
 
         # End of epoch: calculate average losses
-        avg_d_loss = epoch_d_loss_acc / n_batches
-        avg_g_adv_loss = epoch_g_adv_loss_acc / n_batches
-        avg_g_l1_loss = epoch_g_l1_loss_acc / n_batches
-        avg_g_total_loss = epoch_g_total_loss_acc / n_batches
+        avg_d_loss = epoch_d_loss_acc / (X_l_gen.shape[0] // batch_size)
+        avg_g_adv_loss = epoch_g_adv_loss_acc / (X_l_gen.shape[0] // batch_size)
+        avg_g_l1_loss = epoch_g_l1_loss_acc / (X_l_gen.shape[0] // batch_size)
+        avg_g_total_loss = epoch_g_total_loss_acc / (X_l_gen.shape[0] // batch_size)
 
         d_losses.append(avg_d_loss)
         g_adv_losses.append(avg_g_adv_loss)

@@ -1,20 +1,18 @@
 # AI 漫畫自動上色專案
 
-本專案旨在開發一個使用深度學習技術為黑白漫畫圖像自動上色的系統。系統基於 U-Net 架構，並融合了 VGG16 的部分特性，透過學習大量成對的黑白與彩色漫畫圖像，實現對新的黑白漫畫進行上色。
+本專案旨在開發一個使用深度學習技術為黑白漫畫圖像自動上色的系統。系統基於 U-Net 架構（可作為獨立模型或 GAN 的生成器），透過學習大量成對的黑白與彩色漫畫圖像，實現對新的黑白漫畫進行上色。
 
 ## 專案特色與近期改進
 
 在最近的開發迭代中，我們進行了以下主要的更新與優化：
 
-1.  **模型架構 (`baseline.py`)**:
-    *   提供三種 U-Net 類型的模型：
-        *   `unet_vgg16`: 原始基準模型，使用 ReLU 激活函數。
-        *   `best_version`: 改良版模型，將 ReLU 替換為 LeakyReLU (alpha=0.2)，並將激活層明確分離。
-        *   `unet_advanced_prelu`: 進階版模型，在 `best_version` 基礎上將 LeakyReLU 替換為 PReLU 激活函數。
-    *   所有模型輸入圖像尺寸統一為 **512x512**。
+1.  **模型架構 (`model.py`, `baseline.py`)**:
+    *   `model.py` 包含 `unet_advanced_prelu` (U-Net 生成器), `build_discriminator` (PatchGAN 判別器), 和 `define_gan` (組合 GAN 模型) 的定義。
+    *   `baseline.py` 包含其他 U-Net 生成器模型如 `unet_vgg16` 和 `unet_relu_leaky` (也被稱為 `best_version`)。
+    *   所有 U-Net 生成器輸入圖像尺寸統一為 **512x512**。
     *   調整了 `embed_input` (形狀 1000) 的融合邏輯，以適應 512x512 的輸入。
-    *   模型編譯時使用 `Adam` 優化器，損失函數可在 MSE (`MeanSquaredError`) 和 MAE (`MeanAbsoluteError` aka L1 Loss) 之間選擇。移除了不適用的 `CategoricalAccuracy` 指標。
-    *   學習率可作為參數傳入。
+    *   U-Net 模型編譯時使用 `Adam` 優化器，損失函數可在 MSE (`MeanSquaredError`) 和 MAE (`MeanAbsoluteError` aka L1 Loss) 之間選擇。
+    *   GAN 訓練流程已在 `train.py` 中實現，包含判別器和生成器的交替訓練，以及對抗性損失與 L1 重建損失的組合。
 
 2.  **資料預處理與轉換 (`file_converter.py`, `train.py`)**:
     *   `file_converter.py`: 提供將原始彩色圖像轉換為模型所需的黑白 (L 通道) 輸入圖像的功能，並可 resize 圖像至 512x512。使用 `tqdm` 顯示進度。
@@ -130,12 +128,12 @@ python train.py \
 
 ### 3. 模型評估
 
-使用 `utils.py` 腳本評估已訓練模型的性能。
+使用 `utils.py` 腳本評估已訓練模型的性能 (通常是 U-Net 生成器或 GAN 的生成器部分)。
 
 **基本執行範例:**
 ```bash
 python utils.py \
-    --model_path path/to/your/trained_model.h5 \
+    --model_path path/to/your/trained_generator_model.h5 \
     --l_dir path/to/your/test_bw_images \
     --color_dir path/to/your/test_color_images \
     --results_dir evaluation_results/run1
@@ -150,39 +148,63 @@ python utils.py \
 
 評估腳本會輸出平均 PSNR 和 SSIM，並在指定的結果資料夾中生成對比圖像和指標匯總圖。
 
-### 4. 完整流程 (訓練並接著評估)
+### 4. 完整流程 (`main.py`)
 
-使用 `main.py` 腳本可以執行從訓練到評估的完整流程。
+使用 `main.py` 腳本可以執行從訓練到評估的完整流程，支援 U-Net 單獨訓練和 GAN 訓練模式。
 
-**基本執行範例 (使用 `best_version` 模型和 MAE 損失進行訓練，然後評估)：**
+**`main.py` 主要命令列參數 (部分)：**
+
+*   `--train_mode`: 選擇訓練模式 (`unet` 或 `gan`)。
+*   **基礎訓練參數**: 
+    *   `--train_bw_dir`, `--train_color_dir`: 訓練圖像資料夾。
+    *   `--model_type`: U-Net 模型類型 (例如 `best_version`, `unet_advanced_prelu`)，在 GAN 模式下作為生成器。
+    *   `--epochs`, `--batch_size`, `--lr`, `--loss_type` (U-Net 的 L1/MAE 部分)。
+    *   `--model_output_template`: 模型儲存路徑模板。
+*   **GAN 特定參數** (當 `--train_mode gan`時):
+    *   `--lambda_l1`: L1 損失的權重。
+    *   `--lr_discriminator`: 判別器的學習率。
+    *   `--lr_generator_gan`: 生成器在 GAN 對抗訓練時的學習率。
+*   **評估參數**: 
+    *   `--test_l_dir`, `--test_color_dir`: 測試圖像資料夾。
+    *   `--eval_results_dir`: 評估結果儲存目錄。
+*   **控制流程參數**: 
+    *   `--skip_training`, `--skip_evaluation`.
+    *   `--trained_model_path`: 若跳過訓練，指定已訓練模型的路徑。
+
+**執行範例 (U-Net 訓練並評估)：**
 ```bash
-python main.py \
-    --train_bw_dir path/to/your/train_bw_images \
-    --train_color_dir path/to/your/train_color_images \
-    --model_type best_version \
-    --epochs 50 \
-    --batch_size 4 \
-    --lr 0.0001 \
-    --loss_type mae \
-    --test_l_dir path/to/your/test_bw_images \
-    --test_color_dir path/to/your/test_color_images \
-    --eval_results_dir evaluation_results_mae_run
+python main.py --train_mode unet \
+    --train_bw_dir path/to/train_bw --train_color_dir path/to/train_color \
+    --model_type best_version --epochs 50 --batch_size 2 --lr 0.0001 --loss_type mae \
+    --test_l_dir path/to/test_bw --test_color_dir path/to/test_color \
+    --eval_results_dir evaluation_output_unet
 ```
-模型儲存路徑將根據 `--model_output_template` (預設包含模型類型、損失類型和學習率) 自動生成。
 
-**`main.py` 主要命令列參數說明:**
+**執行範例 (GAN 訓練並評估生成器)：**
+```bash
+python main.py --train_mode gan \
+    --train_bw_dir path/to/train_bw --train_color_dir path/to/train_color \
+    --model_type unet_advanced_prelu --epochs 100 --batch_size 1 --lr 0.0002 --loss_type mae \
+    --lambda_l1 100 --lr_discriminator 0.0002 --lr_generator_gan 0.0002 \
+    --test_l_dir path/to/test_bw --test_color_dir path/to/test_color \
+    --eval_results_dir evaluation_output_gan
+```
 
-*   **訓練參數組 (`--train_bw_dir`, `--train_color_dir`, `--model_type`, `--epochs`, `--batch_size`, `--lr`, `--loss_type`, `--model_output_template`)**: 與 `train.py` 中的參數類似，用於配置訓練階段。
-*   **評估參數組 (`--test_l_dir`, `--test_color_dir`, `--eval_results_dir`)**: 與 `utils.py` 中的參數類似，用於配置評估階段。
-*   **控制流程參數組**:
-    *   `--skip_training`: 若指定，則跳過訓練階段，直接使用 `--trained_model_path` 提供的模型進行評估。
-    *   `--trained_model_path`: 如果 `--skip_training` 為 True，則必須提供此參數，指向一個已訓練的模型檔案。如果進行訓練，則此參數可選，若提供則會在訓練完成後使用此模型進行評估 (通常在訓練後會自動使用剛訓練好的模型)。
+**執行範例 (僅評估已訓練的 GAN 生成器模型)：**
+```bash
+python main.py --skip_training --skip_evaluation=False \
+    --trained_model_path trained_models/model_gan_unet_advanced_prelu_lossmae_lr0p0002_final_generator.h5 \
+    --test_l_dir path/to/test_bw --test_color_dir path/to/test_color \
+    --eval_results_dir evaluation_output_gan_eval_only
+```
 
 ### 5. 專案結構 (概覽)
 
 ```
 .
-├── baseline.py               # 模型架構定義 (U-Net variants)
+├── model.py                  # 主要模型定義 (unet_advanced_prelu, discriminator, GAN)
+├── baseline.py               # 其他基準模型定義 (unet_vgg16, unet_relu_leaky)
+├── predict.py                # 使用已訓練模型對圖像資料夾進行著色的腳本
 ├── file_converter.py         # 彩色圖像轉黑白 L 通道工具
 ├── train.py                  # 模型訓練腳本
 ├── utils.py                  # 模型評估與結果視覺化工具

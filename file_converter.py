@@ -33,8 +33,8 @@ if __name__ == '__main__':
     # 假設彩色圖片放在 '1000img-paul' 資料夾下
     # 假設您希望將黑白圖片儲存在 'bw_images_512' 資料夾下
     # 您可以根據您的實際情況修改這些路徑
-    source_folder = '100img-paul' 
-    destination_folder = '100img-paul_bw' # 建議更改輸出資料夾名稱以區分
+    source_folder = 'daterule' 
+    destination_folder = 'daterule-img_bw' # 建議更改輸出資料夾名稱以區分
     image_target_size = (512, 512)
 
     if not os.path.exists(source_folder):
