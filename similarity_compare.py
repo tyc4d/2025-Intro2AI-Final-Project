@@ -3,6 +3,7 @@ import os
 from PIL import Image
 import numpy as np
 import argparse
+from skimage.metrics import structural_similarity as ssim
 
 def get_ssim(image1_path, image2_path):
     """計算兩張圖片的SSIM值"""
@@ -11,34 +12,20 @@ def get_ssim(image1_path, image2_path):
         img1 = Image.open(image1_path).convert('RGB')
         img2 = Image.open(image2_path).convert('RGB')
         
-        # 確保兩張圖片大小相同
-        if img1.size != img2.size:
-            print(f"注意：圖片大小不同，正在將第二張圖片調整為與第一張圖片相同大小 ({img1.size})")
-            img2 = img2.resize(img1.size)
+        # 強制調整兩張圖片為 256x256，使用 LANCZOS 重採樣
+        target_size = (256, 256)
+        img1 = img1.resize(target_size, Image.Resampling.LANCZOS)
+        img2 = img2.resize(target_size, Image.Resampling.LANCZOS)
+        print(f"已將兩張圖片調整為 {target_size} 大小（使用 LANCZOS 重採樣）")
         
         # 轉換為numpy數組
-        img1 = np.array(img1, dtype=np.float64)
-        img2 = np.array(img2, dtype=np.float64)
+        img1 = np.array(img1)
+        img2 = np.array(img2)
         
-        # 計算均值
-        mu1 = np.mean(img1)
-        mu2 = np.mean(img2)
+        # 使用 skimage 的 ssim 函數計算相似度
+        ssim_value = ssim(img1, img2, channel_axis=2, data_range=255)
         
-        # 計算方差和協方差
-        sigma1_sq = np.var(img1)
-        sigma2_sq = np.var(img2)
-        sigma12 = np.mean((img1 - mu1) * (img2 - mu2))
-        
-        # SSIM常數
-        C1 = (0.01 * 255) ** 2
-        C2 = (0.03 * 255) ** 2
-        
-        # 計算SSIM
-        numerator = (2 * mu1 * mu2 + C1) * (2 * sigma12 + C2)
-        denominator = (mu1 ** 2 + mu2 ** 2 + C1) * (sigma1_sq + sigma2_sq + C2)
-        ssim = numerator / denominator
-        
-        return ssim
+        return ssim_value
         
     except Exception as e:
         print(f"錯誤：計算SSIM時發生錯誤 - {str(e)}")
@@ -63,13 +50,13 @@ def main():
         return
     
     # 計算SSIM
-    ssim = get_ssim(args.image1, args.image2)
+    ssim_value = get_ssim(args.image1, args.image2)
     
-    if ssim is not None:
+    if ssim_value is not None:
         print(f"\n圖片1: {args.image1}")
         print(f"圖片2: {args.image2}")
-        print(f"SSIM相似度: {ssim:.4f}")
-        print(f"\n相似度範圍: [-1, 1]，值越接近1表示兩張圖片越相似")
+        print(f"SSIM相似度: {ssim_value:.4f}")
+        print(f"\n相似度範圍: [0, 1]，值越接近1表示兩張圖片越相似")
 
 if __name__ == "__main__":
     main() 
