@@ -91,9 +91,9 @@ def _process_single_image_pair(bw_fname, bw_image_folder, color_image_folder, co
         # For GAN input to discriminator, L channel might be better in [-1, 1] if ab are [-1, 1]
         # Or, ensure discriminator can handle L in [0,1] and ab in [-1,1].
         # For now, generator input L is [0,1]. Discriminator will receive this L.
-        l_channel_for_discriminator_input = l_channel_np # Keeping L in [0,1] for now for disc input
+        # l_channel_for_discriminator_input = l_channel_np # Keeping L in [0,1] for now for disc input
         # If L needs to be in [-1, 1] for discriminator, uncomment below:
-        # l_channel_for_discriminator_input = (l_channel_np * 2.0) - 1.0 
+        l_channel_for_discriminator_input = (l_channel_np * 2.0) - 1.0 
 
         ab_channels_np = color_img_lab[:, :, 1:] / 128.0
         

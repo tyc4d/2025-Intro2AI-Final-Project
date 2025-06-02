@@ -21,8 +21,8 @@ TEST_L_DIR = "test_data/l_channel"       # !!! 需要您設定
 TEST_COLOR_DIR = "test_data/color" # !!! 需要您設定
 
 COMMON_EPOCHS = 200 # 為了快速演示，設為較小值。實際比較時應設為合理值，例如 50 或 100
-COMMON_BATCH_SIZE_UNET = 2
-COMMON_BATCH_SIZE_GAN = 1 # GAN 通常需要較小的 batch size
+COMMON_BATCH_SIZE_UNET = 4
+COMMON_BATCH_SIZE_GAN = 2 # GAN 通常需要較小的 batch size
 COMMON_LR_UNET = 0.0001
 COMMON_LR_GAN_G = 0.0002 # 生成器在 GAN 中的學習率
 COMMON_LR_GAN_D = 0.0002 # 判別器學習率
@@ -290,7 +290,7 @@ def plot_visual_comparison_grid(results, num_samples=5, output_dir="visual_compa
         for model_idx, res_dict in enumerate(valid_results):
             eval_dir = res_dict["eval_dir"]
             # Predicted image is saved in eval_dir with the same name as l_fname by utils.py's plot_results
-            pred_img_path = os.path.join(eval_dir, l_fname)
+            pred_img_path = os.path.join(eval_dir, ("comparison_"+l_fname))
             try:
                 pred_img = Image.open(pred_img_path).convert('RGB') # Assumed to be 512x512
                 axes[sample_idx, model_idx + 1].imshow(pred_img)

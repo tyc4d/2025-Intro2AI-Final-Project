@@ -115,9 +115,9 @@ def build_discriminator(input_shape=(512, 512, 3)):
 
 def define_gan(g_model, d_model, image_shape_l=(512,512,1), embed_dim=1000):
     print("*****Defining Combined GAN model*****")
-    for layer in d_model.layers:
-        if not isinstance(layer, BatchNormalization): 
-            layer.trainable = False
+    # Removed the loop that manually set layer.trainable = False
+    # Keras handles this correctly when d_model is part of gan_model
+    # and gan_model is compiled with its own optimizer for g_model.
 
     gen_input_l = Input(shape=image_shape_l, name="gan_gen_input_l")
     gen_input_embed = Input(shape=(embed_dim,), name="gan_gen_input_embed")
