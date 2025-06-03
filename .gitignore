@@ -2,9 +2,34 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+venv/
 # C extensions
 *.so
+*.zip
+
+
+# Data
+1000img-paul/
+data/
+500img-paul/
+200img-paul/
+100img-paul/
+100img-paul_bw/
+200img-paul_bw/
+500img-paul_bw/
+1000img-paul_bw/
+dataimg-tyc_bw/
+daterule/
+daterule-img_bw
+Manga109/
+my_*/
+comparison_experiments_*/
+
+ref_unet/
+test_data/
+trained_models/
+bw*
+
 
 # Distribution / packaging
 .Python
