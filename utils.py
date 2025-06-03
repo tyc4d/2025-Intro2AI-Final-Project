@@ -80,11 +80,11 @@ def load_test_image_pairs(l_folder, color_folder, target_size=(512, 512)):
             potential_color_path = os.path.join(color_folder, original_name_stem + ext)
             if os.path.exists(potential_color_path):
                 color_file_path = potential_color_path
-                break
-        
+                    break
+            
         if not color_file_path:
             print(f"Warning: Color image not found for {l_file_path} (tried base name: {original_name_stem}). Skipping this image.")
-            continue
+                continue
 
         l_img_arr, true_ab_arr, orig_l_reconstruct_arr, fname = load_and_preprocess_image_pair_for_eval(l_file_path, color_file_path, target_size)
         if l_img_arr is not None:
@@ -217,7 +217,7 @@ def evaluate_model(model_path, test_l_folder, test_color_folder, results_save_di
     """Evaluates model performance and saves results."""
     print(f"Loading model from {model_path}...")
     try:
-        model = load_model(model_path, custom_objects=custom_objects)
+    model = load_model(model_path, custom_objects=custom_objects)
     except Exception as e:
         print(f"Failed to load model: {e}")
         print(f"Ensure '{model_path}' is a valid Keras model file and all custom layers (like LeakyReLU, PReLU) are correctly defined in custom_objects.")

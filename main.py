@@ -98,7 +98,7 @@ if __name__ == '__main__':
             print(f"已建立模型儲存資料夾: {model_output_dir}")
 
         if args.train_mode == 'unet':
-            train_model(
+        train_model(
                 bw_image_dir=args.train_bw_dir,
                 color_image_dir=args.train_color_dir,
                 model_name=args.model_type,
